@@ -82,6 +82,7 @@ class BookingTest extends TestCase
     {
         [$barber, $short] = $this->setupCatalog();
         $long = Service::where('duration_minutes', 60)->firstOrFail();
+        $long->update(['duration_minutes' => 90]);
         [$date, $time, $next] = $this->findAvailable($barber, $long);
         $data = [
             'barber_id'=>$barber->id,'service_id'=>$long->id,'date'=>$date,'time'=>$time,
@@ -184,6 +185,28 @@ class BookingTest extends TestCase
         $this->assertContains('09:00', $slots);
         $this->assertContains('15:00', $slots);
         $this->assertNotContains('12:30', $slots);
+    }
+
+    public function test_public_availability_starts_every_hour_even_when_schedule_opens_at_half_hour(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $date = CarbonImmutable::now(config('app.timezone'))->addDays(2);
+        WorkSchedule::where('barber_id', $barber->id)->where('weekday', $date->dayOfWeek)->delete();
+        WorkSchedule::create(['barber_id'=>$barber->id,'weekday'=>$date->dayOfWeek,'opens_at'=>'09:30','closes_at'=>'12:30','sort_order'=>0]);
+
+        $slots = app(BookingService::class)->availability($barber->id, $service->id, $date->toDateString());
+
+        $this->assertSame(['10:00', '11:00', '12:00'], $slots);
+    }
+
+    public function test_public_booking_rejects_half_hour_start_time(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $data = $this->bookingData($barber, $service);
+        $data['time'] = substr($data['time'], 0, 2).':30';
+
+        $this->postJson('/api/bookings', $data)->assertStatus(409);
+        $this->assertDatabaseCount('appointments', 0);
     }
 
     public function test_time_off_range_blocks_every_included_day(): void
