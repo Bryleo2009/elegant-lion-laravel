@@ -1,0 +1,15 @@
+{
+  "name": "Elegant Lion Barbershop",
+  "short_name": "Elegant Lion",
+  "description": "Reservas de Elegant Lion Barbershop",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11100e",
+  "theme_color": "#11100e",
+  "lang": "es-PE",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
