@@ -627,7 +627,16 @@ onBeforeUnmount(() => {
         </div>
       </template>
     </main>
-    <footer class="footer wrap"><span>© {{new Date().getFullYear()}} Elegant Lion Barbershop</span><span>ESTILO · PRECISIÓN · ELEGANCIA</span></footer>
+    <footer class="footer wrap">
+      <span class="footer-copy">© {{new Date().getFullYear()}} Elegant Lion Barbershop</span>
+      <div class="footer-branding">
+        <span class="footer-motto">ESTILO · PRECISIÓN · ELEGANCIA</span>
+        <a class="footer-developer" href="https://www.ofsystem.com.pe/" target="_blank" rel="noopener noreferrer" aria-label="OfSystem, desarrollador de Elegant Lion">
+          <span>DESARROLLADO POR</span>
+          <img src="/ofsystem-logo-blanco.png" alt="OfSystem" width="118" height="35" loading="lazy" decoding="async"/>
+        </a>
+      </div>
+    </footer>
     <div v-if="showManual" class="modal-backdrop" @click.self="showManual=false" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="manual-title"><div class="modal-head"><h2 id="manual-title">Nueva reserva manual</h2><button class="icon-button" @click="showManual=false" aria-label="Cerrar"><X :size="19"/></button></div><form @submit.prevent="saveManual" class="manual-form"><label class="form-label">Barbero<select v-model="manual.barber_id" @change="loadManualSlots"><option v-for="b in barbers.filter(b=>b.active)" :key="b.id" :value="b.id">{{b.name}}</option></select></label><label class="form-label">Servicio<select v-model="manual.service_id" @change="loadManualSlots"><option v-for="s in services.filter(s=>s.active)" :key="s.id" :value="s.id">{{s.name}}</option></select></label><label class="form-label">Fecha<input type="date" :min="setup.today" :max="manualBookingMaxDate" v-model="manual.date" @change="loadManualSlots" required/></label><label class="form-label">Hora<select v-model="manual.time" required><option disabled value="">Selecciona horario</option><option v-for="t in manualSlots" :key="t">{{t}}</option></select></label><label class="form-label">Nombre del cliente<input v-model="manual.client_name" minlength="3" required placeholder="Nombre completo"/></label><label class="form-label">Celular<input v-model="manual.phone" required inputmode="numeric" placeholder="987654321"/></label><label class="form-label full">Notas (opcional)<input v-model="manual.notes" maxlength="1000" placeholder="Observaciones internas"/></label><button class="btn-main full" :disabled="busy||!manual.time">{{busy?'Guardando…':'Crear cita'}} <ArrowRight :size="18"/></button></form></section></div>
   </div>
 </template>
