@@ -84,7 +84,10 @@ class BookingService
         foreach ($schedules as $schedule) {
             $start = $this->timestamp($day, substr($schedule->opens_at, 0, 5));
             $closes = $this->timestamp($day, substr($schedule->closes_at, 0, 5));
-            for ($candidate = $start; $candidate->lt($closes); $candidate = $candidate->addMinutes(config('booking.interval_minutes'))) {
+            $interval = (int) config('booking.interval_minutes', 60);
+            $openingMinute = $start->hour * 60 + $start->minute;
+            $firstMinute = intdiv($openingMinute + $interval - 1, $interval) * $interval;
+            for ($candidate = $start->startOfDay()->addMinutes($firstMinute); $candidate->lt($closes); $candidate = $candidate->addMinutes($interval)) {
                 if ($this->validTime($barber, $service, $candidate, $busy)) $times[$candidate->format('H:i')] = true;
             }
         }
