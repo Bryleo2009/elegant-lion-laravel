@@ -47,7 +47,7 @@ php artisan serve
 
 **Reglas actuales**
 - Cada barbero define cuántos días calendario se pueden reservar, incluyendo hoy (3 por defecto), con mínimo 60 minutos de anticipación.
-- Inicio de citas cada 30 minutos; duración de servicio múltiplo de 15 minutos.
+- Inicio de citas cada 60 minutos (en horas exactas); duración de servicio múltiplo de 15 minutos. La duración real del servicio y los intervalos de ocupación de 15 minutos no cambian.
 - Horarios del negocio por barbero, 0 = domingo a 6 = sábado.
 - Horario de MySQL y aplicación en `America/Lima`; mantener coherencia de zona horaria.
 - Las modificaciones del horario no cancelan una cita existente. Se debe gestionar expresamente.
