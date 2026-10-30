@@ -633,7 +633,7 @@ onBeforeUnmount(() => {
         <span class="footer-motto">ESTILO · PRECISIÓN · ELEGANCIA</span>
         <a class="footer-developer" href="https://www.ofsystem.com.pe/" target="_blank" rel="noopener noreferrer" aria-label="OfSystem, desarrollador de Elegant Lion">
           <span>DESARROLLADO POR</span>
-          <img src="/ofsystem-logo-blanco.png" alt="OfSystem" width="118" height="35" loading="lazy" decoding="async"/>
+          <img :src="'/ofsystem-logo-blanco.png'" alt="OfSystem" width="118" height="35" loading="lazy" decoding="async"/>
         </a>
       </div>
     </footer>
