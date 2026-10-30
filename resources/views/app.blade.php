@@ -8,9 +8,31 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Elegant Lion">
-    <meta name="description" content="Agenda tu próximo corte en Elegant Lion Barbershop.">
+    @php
+        $socialTitle = 'Elegant Lion Barbershop | Reserva tu próximo corte';
+        $socialDescription = 'Tu próximo corte empieza aquí. Reserva en Elegant Lion Barbershop: elige tu servicio, barbero, fecha y horario en minutos.';
+        $socialUrl = 'https://elegant-lion.ofsystem.com.pe/';
+        $socialImage = $socialUrl.'logo.png';
+    @endphp
+    <title>{{ $socialTitle }}</title>
+    <meta name="description" content="{{ $socialDescription }}">
+    <meta name="robots" content="{{ request()->is('admin') ? 'noindex, nofollow' : 'index, follow' }}">
+    <link rel="canonical" href="{{ $socialUrl }}">
+    <meta property="og:type" content="website">
+    <meta property="og:locale" content="es_PE">
+    <meta property="og:site_name" content="Elegant Lion Barbershop">
+    <meta property="og:title" content="{{ $socialTitle }}">
+    <meta property="og:description" content="{{ $socialDescription }}">
+    <meta property="og:url" content="{{ $socialUrl }}">
+    <meta property="og:image" content="{{ $socialImage }}">
+    <meta property="og:image:secure_url" content="{{ $socialImage }}">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:alt" content="Logo de Elegant Lion Barbershop">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="{{ $socialTitle }}">
+    <meta name="twitter:description" content="{{ $socialDescription }}">
+    <meta name="twitter:image" content="{{ $socialImage }}">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>Elegant Lion | Barbería</title>
     <link rel="icon" href="/logo.png" type="image/png">
     <link rel="apple-touch-icon" href="/pwa-192.png">
     <link rel="manifest" href="/manifest.webmanifest">
