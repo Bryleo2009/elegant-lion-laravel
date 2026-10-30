@@ -12,7 +12,7 @@
         $socialTitle = 'Elegant Lion Barbershop | Reserva tu próximo corte';
         $socialDescription = 'Tu próximo corte empieza aquí. Reserva en Elegant Lion Barbershop: elige tu servicio, barbero, fecha y horario en minutos.';
         $socialUrl = 'https://elegant-lion.ofsystem.com.pe/';
-        $socialImage = $socialUrl.'logo.png';
+        $socialImage = $socialUrl.(is_file(public_path('og-elegant-lion.jpg')) ? 'og-elegant-lion.jpg' : 'logo.png');
     @endphp
     <title>{{ $socialTitle }}</title>
     <meta name="description" content="{{ $socialDescription }}">
