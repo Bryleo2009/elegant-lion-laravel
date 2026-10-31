@@ -332,7 +332,9 @@ input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--gold); }
 .staff-info > span:last-child, .client-data { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .staff-info small, .client-data small { margin: 0; }
 .staff-info strong, .client-data strong { font-size: 14px; }
-.row-controls { display: flex; align-items: center; gap: 8px; }
+.row-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.staff-row .delete-button { color: #9b5148; }
+.staff-row .delete-button:hover:not(:disabled) { border-color: #c99690; background: #f8eeec; color: #7e342d; }
 .archived-badge { margin-left: 6px; padding: 2px 8px; background: #3a2623; border-radius: 999px; color: var(--bad); font-size: 11.5px; font-weight: 600; }
 
 .service-admin-list { display: flex; flex-direction: column; gap: 10px; }

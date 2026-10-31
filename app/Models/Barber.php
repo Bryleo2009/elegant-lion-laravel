@@ -8,6 +8,7 @@ class Barber extends Model
 {
     protected $fillable = ['name', 'subtitle', 'active', 'sort_order', 'booking_days_ahead'];
     protected function casts(): array { return ['active' => 'boolean']; }
+    public function appointments(): HasMany { return $this->hasMany(Appointment::class); }
     public function schedules(): HasMany { return $this->hasMany(WorkSchedule::class); }
     public function timeOffs(): HasMany { return $this->hasMany(TimeOff::class); }
 }

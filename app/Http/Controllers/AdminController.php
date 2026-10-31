@@ -179,6 +179,23 @@ class AdminController extends Controller
         return response()->json(['barber' => $barber]);
     }
 
+    public function barberDestroy(Barber $barber): JsonResponse
+    {
+        return DB::transaction(function () use ($barber) {
+            // La reserva bloquea al barbero antes de escribir; usar el mismo orden evita carreras.
+            $barber = Barber::whereKey($barber->id)->lockForUpdate()->firstOrFail();
+            if ($barber->appointments()->exists()) {
+                return response()->json([
+                    'message' => 'Este barbero tiene reservas registradas y no puede eliminarse. Desactívalo para conservar el historial.',
+                ], 409);
+            }
+            // Las reglas de horario y ausencias se borran por cascada de la FK.
+            $barber->delete();
+
+            return response()->json(['ok' => true, 'message' => 'Barbero eliminado correctamente.']);
+        }, 3);
+    }
+
     public function services(): JsonResponse { return response()->json(['services' => Service::orderBy('name')->get()]); }
 
     public function serviceStore(Request $request): JsonResponse

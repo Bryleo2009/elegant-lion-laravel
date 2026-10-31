@@ -270,4 +270,58 @@ class BookingTest extends TestCase
 
         $this->assertDatabaseHas('time_offs', ['barber_id'=>$barber->id,'day'=>$start,'ends_on'=>$end]);
     }
+
+    public function test_admin_can_delete_unused_barber_and_its_schedule_and_days_off(): void
+    {
+        $barber = Barber::create(['name' => 'Barbero duplicado', 'active' => false]);
+        WorkSchedule::create([
+            'barber_id' => $barber->id, 'weekday' => 1,
+            'opens_at' => '10:00', 'closes_at' => '18:00',
+        ]);
+        TimeOff::create([
+            'barber_id' => $barber->id,
+            'day' => CarbonImmutable::now(config('app.timezone'))->addDay()->toDateString(),
+            'reason' => 'Día libre',
+        ]);
+        $admin = User::create([
+            'name' => 'Owner', 'email' => 'delete-barber@example.test',
+            'password' => 'a-long-password-for-tests', 'is_admin' => true,
+        ]);
+
+        $this->actingAs($admin)->deleteJson("/api/admin/barbers/{$barber->id}")
+            ->assertOk()->assertJsonPath('ok', true);
+        $this->assertDatabaseMissing('barbers', ['id' => $barber->id]);
+        $this->assertDatabaseCount('work_schedules', 0);
+        $this->assertDatabaseCount('time_offs', 0);
+    }
+
+    public function test_barber_with_a_booking_cannot_be_deleted_even_if_inactive(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $appointment = app(BookingService::class)->book($this->bookingData($barber, $service));
+        $admin = User::create([
+            'name' => 'Owner', 'email' => 'keep-history@example.test',
+            'password' => 'a-long-password-for-tests', 'is_admin' => true,
+        ]);
+
+        $barber->update(['active' => false]);
+        $this->actingAs($admin)->deleteJson("/api/admin/barbers/{$barber->id}")
+            ->assertStatus(409);
+        $this->assertDatabaseHas('barbers', ['id' => $barber->id, 'active' => 0]);
+        $this->assertDatabaseHas('appointments', ['id' => $appointment->id]);
+
+        // Ni siquiera una reserva cancelada puede perder su relación histórica.
+        $this->patchJson("/api/admin/appointments/{$appointment->id}/status", [
+            'status' => 'cancelled',
+        ])->assertOk();
+        $this->deleteJson("/api/admin/barbers/{$barber->id}")->assertStatus(409);
+        $this->assertDatabaseHas('appointments', ['id' => $appointment->id]);
+    }
+
+    public function test_non_admin_cannot_delete_barber(): void
+    {
+        $barber = Barber::create(['name' => 'Protegido']);
+        $this->deleteJson("/api/admin/barbers/{$barber->id}")->assertUnauthorized();
+        $this->assertDatabaseHas('barbers', ['id' => $barber->id]);
+    }
 }

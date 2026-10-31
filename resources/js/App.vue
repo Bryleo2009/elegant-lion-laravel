@@ -187,8 +187,8 @@ async function loadAdmin() {
   try {
     const [b,s] = await Promise.all([api('/api/admin/barbers'),api('/api/admin/services')])
     barbers.value = b.barbers; services.value = s.services
-    scheduleBarber.value ||= barbers.value[0]?.id
-    manual.value.barber_id ||= barbers.value.filter(b=>b.active)[0]?.id
+    if (!barbers.value.some(b => b.id === scheduleBarber.value)) scheduleBarber.value = barbers.value[0]?.id ?? null
+    if (!barbers.value.some(b => b.id === manual.value.barber_id && b.active)) manual.value.barber_id = barbers.value.find(b=>b.active)?.id ?? null
     manual.value.service_id ||= services.value.filter(s=>s.active)[0]?.id
     await loadTab()
   } catch(e) { fail(e) }
@@ -262,6 +262,19 @@ async function toggleBarber(b) {
   if (b.active && !window.confirm('Al desactivarlo no aparecerá para nuevas reservas. Las citas actuales seguirán registradas. ¿Continuar?')) return
   try { await api(`/api/admin/barbers/${b.id}`, {method:'PATCH',body:{active:!b.active}}); notify('Disponibilidad de barbero actualizada'); await loadAdmin() }
   catch(e) { fail(e) }
+}
+async function deleteBarber(b) {
+  if (busy.value || !window.confirm(`¿Eliminar definitivamente a "${b.name}"? Esta acción no se puede deshacer. Si tiene reservas registradas, no se eliminará.`)) return
+  busy.value = true
+  try {
+    await api(`/api/admin/barbers/${b.id}`, {method:'DELETE'})
+    if (String(agendaBarberId.value) === String(b.id)) agendaBarberId.value = ''
+    if (Number(scheduleBarber.value) === Number(b.id)) scheduleBarber.value = null
+    if (Number(manual.value.barber_id) === Number(b.id)) manual.value.barber_id = null
+    setup.value.barbers = setup.value.barbers.filter(barber => barber.id !== b.id)
+    await loadAdmin()
+    notify('Barbero eliminado correctamente')
+  } catch(e) { fail(e) } finally { busy.value = false }
 }
 async function loadSchedules() {
   if (!scheduleBarber.value) return
@@ -617,10 +630,10 @@ onBeforeUnmount(() => {
 
             <template v-else-if="activeTab==='equipo'">
               <div class="panel-head"><div><span class="overline">PERSONAL</span><h2>Barberos</h2></div><span class="counter">{{barbers.length}} en total</span></div>
-              <div class="simple-list"><div v-for="b in barbers" :key="b.id" class="simple-row staff-row"><span class="staff-info"><span class="staff-avatar">{{b.name[0]}}</span><span><strong>{{b.name}}</strong><small>{{b.subtitle || 'Barbero'}}</small></span></span><span class="row-controls"><button class="icon-button" @click="editBarber(b)" aria-label="Editar nombre"><Pencil :size="16"/></button><button class="text-action" :class="{'danger-text':b.active}" @click="toggleBarber(b)">{{b.active?'Desactivar':'Activar'}}</button></span></div></div>
+              <div class="simple-list"><div v-for="b in barbers" :key="b.id" class="simple-row staff-row"><span class="staff-info"><span class="staff-avatar">{{b.name[0]}}</span><span><strong>{{b.name}}</strong><small>{{b.subtitle || 'Barbero'}}</small></span></span><span class="row-controls"><button class="icon-button" @click="editBarber(b)" aria-label="Editar nombre"><Pencil :size="16"/></button><button class="text-action" :class="{'danger-text':b.active}" @click="toggleBarber(b)" :disabled="busy">{{b.active?'Desactivar':'Activar'}}</button><button class="icon-button delete-button" type="button" @click="deleteBarber(b)" :disabled="busy" :aria-label="'Eliminar a '+b.name" :title="'Eliminar a '+b.name"><Trash2 :size="16"/></button></span></div></div>
               <div class="divider"></div><h3 class="subheading">Agregar barbero</h3>
               <form class="inline-form" @submit.prevent="saveBarber"><label class="form-label">Nombre<input v-model="newBarber.name" required minlength="2" placeholder="Nombre completo"/></label><label class="form-label">Descripción<input v-model="newBarber.subtitle" placeholder="Especialista en degradados"/></label><button class="secondary-button" type="submit" :disabled="busy"><Plus :size="16"/> Agregar</button></form>
-              <p class="field-hint">Desactivar a alguien lo retira de nuevas reservas, pero conserva las citas y su historial.</p>
+              <p class="field-hint">Puedes eliminar definitivamente a un barbero sin reservas registradas. Si ya tiene citas en su historial, desactívalo para conservarlas.</p>
             </template>
 
             <template v-else-if="activeTab==='clientes'">

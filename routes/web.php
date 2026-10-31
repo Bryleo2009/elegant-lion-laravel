@@ -26,6 +26,7 @@ Route::prefix('api')->group(function () {
         Route::get('/barbers', [AdminController::class, 'barbers']);
         Route::post('/barbers', [AdminController::class, 'barberStore']);
         Route::patch('/barbers/{barber}', [AdminController::class, 'barberUpdate']);
+        Route::delete('/barbers/{barber}', [AdminController::class, 'barberDestroy']);
         Route::get('/services', [AdminController::class, 'services']);
         Route::post('/services', [AdminController::class, 'serviceStore']);
         Route::patch('/services/{service}', [AdminController::class, 'serviceUpdate']);
