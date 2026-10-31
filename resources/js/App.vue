@@ -87,6 +87,7 @@ const visibleContactErrors = computed(() => ({
   phone: (contactTouched.value.phone || contactSubmitted.value) ? contactErrors.value.phone : '',
 }))
 const canBook = computed(() => barberId.value && serviceId.value && date.value && time.value && !contactErrors.value.name && !contactErrors.value.phone)
+const activeBarbers = computed(() => barbers.value.filter(barber => barber.active))
 const displayedAppointments = computed(() => sortAppointmentsForDisplay(appointments.value, adminNowKey.value))
 const manualBookingMaxDate = computed(() => {
   const barber = barbers.value.find(item => item.id === manual.value.barber_id)
@@ -187,8 +188,9 @@ async function loadAdmin() {
   try {
     const [b,s] = await Promise.all([api('/api/admin/barbers'),api('/api/admin/services')])
     barbers.value = b.barbers; services.value = s.services
-    if (!barbers.value.some(b => b.id === scheduleBarber.value)) scheduleBarber.value = barbers.value[0]?.id ?? null
-    if (!barbers.value.some(b => b.id === manual.value.barber_id && b.active)) manual.value.barber_id = barbers.value.find(b=>b.active)?.id ?? null
+    if (!activeBarbers.value.some(b => b.id === scheduleBarber.value)) scheduleBarber.value = activeBarbers.value[0]?.id ?? null
+    if (agendaBarberId.value && !activeBarbers.value.some(b => String(b.id) === String(agendaBarberId.value))) agendaBarberId.value = ''
+    if (!activeBarbers.value.some(b => b.id === manual.value.barber_id)) manual.value.barber_id = activeBarbers.value[0]?.id ?? null
     manual.value.service_id ||= services.value.filter(s=>s.active)[0]?.id
     await loadTab()
   } catch(e) { fail(e) }
@@ -277,7 +279,11 @@ async function deleteBarber(b) {
   } catch(e) { fail(e) } finally { busy.value = false }
 }
 async function loadSchedules() {
-  if (!scheduleBarber.value) return
+  if (!scheduleBarber.value) {
+    rules.value = []
+    timeOffs.value = []
+    return
+  }
   try {
     const r = await api('/api/admin/schedules?barber_id=' + scheduleBarber.value)
     scheduleBookingDays.value = Number(r.barber?.booking_days_ahead || 3)
@@ -286,6 +292,7 @@ async function loadSchedules() {
   } catch(e) { fail(e) }
 }
 async function saveSchedule() {
+  if (!scheduleBarber.value) return
   busy.value = true
   try {
     const r = await api('/api/admin/schedules', {method:'PUT',body:{barber_id:scheduleBarber.value,booking_days_ahead:Number(scheduleBookingDays.value),rules:rules.value}})
@@ -293,7 +300,7 @@ async function saveSchedule() {
   } catch(e) { fail(e) } finally { busy.value = false }
 }
 async function blockDay() {
-  if (!offDay.value) return
+  if (!offDay.value || !scheduleBarber.value) return
   busy.value = true
   try {
     await api('/api/admin/time-offs', {method:'POST',body:{barber_id:scheduleBarber.value,day:offDay.value,ends_on:offEnd.value || offDay.value,reason:offReason.value}})
@@ -598,7 +605,7 @@ onBeforeUnmount(() => {
               <div class="panel-head"><div><span class="overline">GESTIÓN DE CITAS</span><h2>Agenda</h2></div><button class="gold-button" @click="openManual"><Plus :size="17"/> Nueva cita</button></div>
               <div class="agenda-toolbar">
                 <div class="date-toolbar"><button class="icon-button" @click="adminDate=localDateAdd(adminDate,-1);loadAgenda()" aria-label="Día anterior"><ChevronLeft :size="20"/></button><input aria-label="Fecha de agenda" type="date" v-model="adminDate" @change="loadAgenda"/><button class="icon-button" @click="adminDate=localDateAdd(adminDate,1);loadAgenda()" aria-label="Día siguiente"><ChevronRight :size="20"/></button><button class="today-button" @click="adminDate=setup.today;loadAgenda()">Hoy</button></div>
-                <label class="form-label agenda-barber-filter"><span>Barbero</span><select v-model="agendaBarberId" @change="loadAgenda" aria-label="Filtrar agenda por barbero"><option value="">Todos los barberos</option><option v-for="barber in barbers" :key="barber.id" :value="String(barber.id)">{{barber.name}}</option></select></label>
+                <label class="form-label agenda-barber-filter"><span>Barbero</span><select v-model="agendaBarberId" @change="loadAgenda" aria-label="Filtrar agenda por barbero"><option value="">Todos los barberos</option><option v-for="barber in activeBarbers" :key="barber.id" :value="String(barber.id)">{{barber.name}}</option></select></label>
               </div>
               <div class="metric-grid"><div class="metric"><small>Reservas</small><strong>{{stats.total}}</strong><span>del día</span></div><div class="metric"><small>Por atender</small><strong>{{stats.confirmed}}</strong><span>confirmadas</span></div><div class="metric"><small>Atendidas</small><strong>{{stats.completed}}</strong><span>completadas</span></div><div class="metric"><small>No asistieron</small><strong>{{stats.no_show}}</strong><span>ausencias</span></div></div>
               <div class="list-header"><h3>Reservas del día</h3><span>{{dateLabel(adminDate)}}</span></div>
@@ -617,14 +624,14 @@ onBeforeUnmount(() => {
             <template v-else-if="activeTab==='horarios'">
               <div class="panel-head"><div><span class="overline">DISPONIBILIDAD</span><h2>Horarios</h2></div></div>
               <p class="section-description">Organiza los turnos de cada barbero y bloquea días sin atención.</p>
-              <div class="schedule-settings"><label class="form-label select-barber">Barbero<select v-model="scheduleBarber" @change="loadSchedules"><option v-for="b in barbers" :key="b.id" :value="b.id">{{b.name}}</option></select></label><label class="form-label booking-window">Días disponibles para reservar<input type="number" v-model.number="scheduleBookingDays" min="1" max="90"/><small>Incluye el día de hoy.</small></label></div>
+              <div class="schedule-settings"><label class="form-label select-barber">Barbero<select v-model="scheduleBarber" @change="loadSchedules" :disabled="!activeBarbers.length"><option v-if="!activeBarbers.length" :value="null" disabled>No hay barberos activos</option><option v-for="b in activeBarbers" :key="b.id" :value="b.id">{{b.name}}</option></select></label><label class="form-label booking-window">Días disponibles para reservar<input type="number" v-model.number="scheduleBookingDays" min="1" max="90"/><small>Incluye el día de hoy.</small></label></div>
               <h3 class="subheading">Horario semanal</h3>
               <div class="rules schedule-rules"><section v-for="r in rules" :key="r.weekday" class="schedule-day"><div class="schedule-day-head"><strong>{{weekNames[r.weekday]}}</strong><button class="text-action" @click="addScheduleBlock(r)" :disabled="r.blocks.length>=4"><Plus :size="14"/> Agregar bloque</button></div><div v-if="!r.blocks.length" class="closed-day">Sin atención</div><div v-for="(block,index) in r.blocks" :key="index" class="schedule-block"><span class="block-number">{{index+1}}</span><input type="time" v-model="block.opens_at" step="1800" :aria-label="`Inicio ${weekNames[r.weekday]} bloque ${index+1}`"/><span>a</span><input type="time" v-model="block.closes_at" step="1800" :aria-label="`Fin ${weekNames[r.weekday]} bloque ${index+1}`"/><button class="icon-button block-remove" @click="removeScheduleBlock(r,index)" aria-label="Eliminar bloque"><X :size="16"/></button></div></section></div>
               <p class="field-hint">Los cambios no cancelan las reservas que ya fueron confirmadas.</p>
               <button class="gold-button save-button" @click="saveSchedule" :disabled="busy||!rules.length"><Save :size="17"/> Guardar horarios</button>
               <div class="divider"></div>
               <h3 class="subheading">Días bloqueados</h3><p class="section-description">Vacaciones, feriados o ausencias. El rango incluye ambas fechas y solo afecta al barbero seleccionado.</p>
-              <form class="inline-form time-off-form" @submit.prevent="blockDay"><label class="form-label">Desde<input type="date" v-model="offDay" :min="setup.today" @change="!offEnd||offEnd<offDay ? offEnd=offDay : null" required/></label><label class="form-label">Hasta<input type="date" v-model="offEnd" :min="offDay||setup.today" required/></label><label class="form-label">Motivo (opcional)<input v-model="offReason" placeholder="Descanso, viaje…"/></label><button class="secondary-button" type="submit" :disabled="busy"><CalendarOff :size="16"/> Bloquear rango</button></form>
+              <form class="inline-form time-off-form" @submit.prevent="blockDay"><label class="form-label">Desde<input type="date" v-model="offDay" :min="setup.today" @change="!offEnd||offEnd<offDay ? offEnd=offDay : null" required/></label><label class="form-label">Hasta<input type="date" v-model="offEnd" :min="offDay||setup.today" required/></label><label class="form-label">Motivo (opcional)<input v-model="offReason" placeholder="Descanso, viaje…"/></label><button class="secondary-button" type="submit" :disabled="busy||!scheduleBarber"><CalendarOff :size="16"/> Bloquear rango</button></form>
               <div class="simple-list"><div v-for="off in timeOffs" :key="off.id" class="simple-row time-off-row"><span><CalendarOff :size="17"/><span><strong>{{dateLabel(off.day.slice(0,10))}}<template v-if="off.ends_on && off.ends_on.slice(0,10)!==off.day.slice(0,10)"> — {{dateLabel(off.ends_on.slice(0,10))}}</template></strong><small>{{off.reason || 'Sin atención'}}</small></span></span><button @click="unblockDay(off)" class="text-action">Habilitar</button></div><div v-if="!timeOffs.length" class="quiet-empty">No hay rangos bloqueados para este barbero.</div></div>
             </template>
 
@@ -662,6 +669,6 @@ onBeforeUnmount(() => {
         </a>
       </div>
     </footer>
-    <div v-if="showManual" class="modal-backdrop" @click.self="showManual=false" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="manual-title"><div class="modal-head"><h2 id="manual-title">Nueva reserva manual</h2><button class="icon-button" @click="showManual=false" aria-label="Cerrar"><X :size="19"/></button></div><form @submit.prevent="saveManual" class="manual-form"><label class="form-label">Barbero<select v-model="manual.barber_id" @change="loadManualSlots"><option v-for="b in barbers.filter(b=>b.active)" :key="b.id" :value="b.id">{{b.name}}</option></select></label><label class="form-label">Servicio<select v-model="manual.service_id" @change="loadManualSlots"><option v-for="s in services.filter(s=>s.active)" :key="s.id" :value="s.id">{{s.name}}</option></select></label><label class="form-label">Fecha<input type="date" :min="setup.today" :max="manualBookingMaxDate" v-model="manual.date" @change="loadManualSlots" required/></label><label class="form-label">Hora<select v-model="manual.time" required><option disabled value="">Selecciona horario</option><option v-for="t in manualSlots" :key="t">{{t}}</option></select></label><label class="form-label">Nombre del cliente<input v-model="manual.client_name" minlength="3" required placeholder="Nombre completo"/></label><label class="form-label">Celular<input v-model="manual.phone" required inputmode="numeric" placeholder="987654321"/></label><label class="form-label full">Notas (opcional)<input v-model="manual.notes" maxlength="1000" placeholder="Observaciones internas"/></label><button class="btn-main full" :disabled="busy||!manual.time">{{busy?'Guardando…':'Crear cita'}} <ArrowRight :size="18"/></button></form></section></div>
+    <div v-if="showManual" class="modal-backdrop" @click.self="showManual=false" role="presentation"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="manual-title"><div class="modal-head"><h2 id="manual-title">Nueva reserva manual</h2><button class="icon-button" @click="showManual=false" aria-label="Cerrar"><X :size="19"/></button></div><form @submit.prevent="saveManual" class="manual-form"><label class="form-label">Barbero<select v-model="manual.barber_id" @change="loadManualSlots"><option v-for="b in activeBarbers" :key="b.id" :value="b.id">{{b.name}}</option></select></label><label class="form-label">Servicio<select v-model="manual.service_id" @change="loadManualSlots"><option v-for="s in services.filter(s=>s.active)" :key="s.id" :value="s.id">{{s.name}}</option></select></label><label class="form-label">Fecha<input type="date" :min="setup.today" :max="manualBookingMaxDate" v-model="manual.date" @change="loadManualSlots" required/></label><label class="form-label">Hora<select v-model="manual.time" required><option disabled value="">Selecciona horario</option><option v-for="t in manualSlots" :key="t">{{t}}</option></select></label><label class="form-label">Nombre del cliente<input v-model="manual.client_name" minlength="3" required placeholder="Nombre completo"/></label><label class="form-label">Celular<input v-model="manual.phone" required inputmode="numeric" placeholder="987654321"/></label><label class="form-label full">Notas (opcional)<input v-model="manual.notes" maxlength="1000" placeholder="Observaciones internas"/></label><button class="btn-main full" :disabled="busy||!manual.time">{{busy?'Guardando…':'Crear cita'}} <ArrowRight :size="18"/></button></form></section></div>
   </div>
 </template>
