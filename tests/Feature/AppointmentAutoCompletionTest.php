@@ -137,4 +137,52 @@ class AppointmentAutoCompletionTest extends TestCase
         ])->assertStatus(409);
         $this->assertSame(0, app(AppointmentCompletionService::class)->completeExpired());
     }
+
+
+    public function test_agenda_barber_filter_also_filters_statistics(): void
+    {
+        $appointment = $this->futureAppointment();
+        $anotherBarber = Barber::create([
+            'name' => 'Segundo barbero',
+            'active' => true,
+            'booking_days_ahead' => 14,
+        ]);
+        $otherAppointment = $appointment->replicate();
+        $otherAppointment->idempotency_key = (string) Str::uuid();
+        $otherAppointment->barber_id = $anotherBarber->id;
+        $otherAppointment->status = 'completed';
+        $otherAppointment->save();
+
+        $admin = User::create([
+            'name' => 'Owner', 'email' => 'filter@example.test',
+            'password' => 'a-long-password-for-tests', 'is_admin' => true,
+        ]);
+        $day = $appointment->starts_at->format('Y-m-d');
+
+        $this->actingAs($admin)
+            ->getJson('/api/admin/appointments?date='.$day)
+            ->assertOk()
+            ->assertJsonCount(2, 'appointments')
+            ->assertJsonPath('stats.total', 2)
+            ->assertJsonPath('stats.confirmed', 1)
+            ->assertJsonPath('stats.completed', 1);
+
+        $this->getJson('/api/admin/appointments?date='.$day.'&barber_id='.$appointment->barber_id)
+            ->assertOk()
+            ->assertJsonCount(1, 'appointments')
+            ->assertJsonPath('appointments.0.id', $appointment->id)
+            ->assertJsonPath('stats.total', 1)
+            ->assertJsonPath('stats.confirmed', 1)
+            ->assertJsonPath('stats.completed', 0);
+
+        $this->getJson('/api/admin/appointments?date='.$day.'&barber_id='.$anotherBarber->id)
+            ->assertOk()
+            ->assertJsonCount(1, 'appointments')
+            ->assertJsonPath('appointments.0.id', $otherAppointment->id)
+            ->assertJsonPath('stats.total', 1)
+            ->assertJsonPath('stats.completed', 1);
+
+        $this->getJson('/api/admin/appointments?date='.$day.'&barber_id=999999')
+            ->assertUnprocessable();
+    }
 }

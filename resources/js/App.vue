@@ -29,6 +29,7 @@ const booked = ref(null)
 const auth = ref({ email: '', password: '' })
 const activeTab = ref('agenda')
 const adminDate = ref('')
+const agendaBarberId = ref('')
 const appointments = ref([])
 const adminNowKey = ref(timeKeyInZone())
 const stats = ref({total: 0, confirmed: 0, completed: 0, no_show: 0})
@@ -200,13 +201,18 @@ async function loadTab() {
 async function switchTab(tab) {
   activeTab.value = tab; error.value = ''; await loadTab()
 }
+let agendaRequest = 0
 async function loadAgenda() {
   if (!adminDate.value) return
+  const requestId = ++agendaRequest
+  const params = new URLSearchParams({ date: adminDate.value })
+  if (agendaBarberId.value) params.set('barber_id', agendaBarberId.value)
   try {
     adminNowKey.value = timeKeyInZone()
-    const r = await api('/api/admin/appointments?date=' + adminDate.value)
+    const r = await api('/api/admin/appointments?' + params)
+    if (requestId !== agendaRequest) return
     appointments.value = r.appointments; stats.value = r.stats
-  } catch(e) { fail(e) }
+  } catch(e) { if (requestId === agendaRequest) fail(e) }
 }
 async function changeStatus(a, status) {
   const text = {completed:'marcar como atendida',no_show:'registrar como inasistencia',cancelled:'cancelar'}[status]
@@ -578,9 +584,10 @@ onBeforeUnmount(() => {
             <template v-if="activeTab==='agenda'">
               <div class="panel-head"><div><span class="overline">GESTIÓN DE CITAS</span><h2>Agenda</h2></div><button class="gold-button" @click="openManual"><Plus :size="17"/> Nueva cita</button></div>
               <div class="date-toolbar"><button class="icon-button" @click="adminDate=localDateAdd(adminDate,-1);loadAgenda()" aria-label="Día anterior"><ChevronLeft :size="20"/></button><input aria-label="Fecha de agenda" type="date" v-model="adminDate" @change="loadAgenda"/><button class="icon-button" @click="adminDate=localDateAdd(adminDate,1);loadAgenda()" aria-label="Día siguiente"><ChevronRight :size="20"/></button><button class="today-button" @click="adminDate=setup.today;loadAgenda()">Hoy</button></div>
+              <label class="form-label agenda-barber-filter"><span>Barbero</span><select v-model="agendaBarberId" @change="loadAgenda" aria-label="Filtrar agenda por barbero"><option value="">Todos los barberos</option><option v-for="barber in barbers" :key="barber.id" :value="String(barber.id)">{{barber.name}}</option></select></label>
               <div class="metric-grid"><div class="metric"><small>Reservas</small><strong>{{stats.total}}</strong><span>del día</span></div><div class="metric"><small>Por atender</small><strong>{{stats.confirmed}}</strong><span>confirmadas</span></div><div class="metric"><small>Atendidas</small><strong>{{stats.completed}}</strong><span>completadas</span></div><div class="metric"><small>No asistieron</small><strong>{{stats.no_show}}</strong><span>ausencias</span></div></div>
               <div class="list-header"><h3>Reservas del día</h3><span>{{dateLabel(adminDate)}}</span></div>
-              <div v-if="!appointments.length" class="admin-empty"><CalendarDays :size="30"/> Aún no hay reservas para esta fecha.</div>
+              <div v-if="!appointments.length" class="admin-empty"><CalendarDays :size="30"/> {{agendaBarberId ? 'Este barbero no tiene reservas para esta fecha.' : 'Aún no hay reservas para esta fecha.'}}</div>
               <div v-else class="appointment-list">
                 <template v-for="(a,index) in displayedAppointments" :key="a.id">
                   <div v-if="appointmentDisplayState(a,adminNowKey)!=='upcoming' && (index===0 || appointmentDisplayState(displayedAppointments[index-1],adminNowKey)==='upcoming')" class="appointment-history-divider"><span>Historial del día</span><small>Finalizadas o con hora vencida</small></div>

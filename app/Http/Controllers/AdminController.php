@@ -50,9 +50,17 @@ class AdminController extends Controller
     public function overview(Request $request, AppointmentCompletionService $completion): JsonResponse
     {
         $completion->completeExpired();
-        $day = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']])['date'] ?? now()->toDateString();
+        $filters = $request->validate([
+            'date' => ['nullable', 'date_format:Y-m-d'],
+            'barber_id' => ['sometimes', 'required', 'integer', 'exists:barbers,id'],
+        ]);
+        $day = $filters['date'] ?? now()->toDateString();
         $query = Appointment::with(['client:id,name,phone','barber:id,name','service:id,name,duration_minutes,price_cents'])
-            ->whereDate('starts_at', $day)->orderBy('starts_at');
+            ->whereDate('starts_at', $day);
+        if (isset($filters['barber_id'])) {
+            $query->where('barber_id', $filters['barber_id']);
+        }
+        $query->orderBy('starts_at');
         $appointments = $query->get();
         $autoCompletedIds = AppointmentEvent::query()
             ->whereIn('appointment_id', $appointments->pluck('id'))
