@@ -55,6 +55,18 @@ php artisan serve
 - La reserva pública es instalable como aplicación móvil (PWA) desde navegadores compatibles.
 - No-show/completada solo si la hora de inicio ya pasó; no se pueden marcar citas futuras.
 
+## Cierre automático de reservas
+
+Las citas `confirmed` pasan automáticamente a `completed` **al terminar la duración del servicio** (`ends_at`), no al iniciarse la reserva. El cambio queda auditado con `user_id = null` y una nota de cierre automático. No se modifican citas canceladas, inasistencias ni completadas manualmente. El administrador puede corregir un cierre automático a «No asistió» desde la agenda, pero no cambiar cierres manuales.
+
+El panel de administración sincroniza los vencimientos al consultar la agenda y se actualiza cada minuto si permanece abierto. Para ejecutar el proceso incluso sin usuarios conectados, instalar el cron de Laravel Scheduler en producción:
+
+```cron
+* * * * * cd /ruta/al/proyecto && php artisan schedule:run >> /dev/null 2>&1
+```
+
+Para ejecutar una sincronización puntual: `php artisan appointments:complete-expired`. Asegurar `APP_TIMEZONE=America/Lima`. El comando es idempotente y conserva la trazabilidad. El cambio exige desplegar el código y configurar el cron en el servidor.
+
 ## Anti doble reserva: 3 capas
 
 1. **Disponibilidad de lectura:** `GET /api/public/availability` presenta los horarios disponibles de manera informativa.

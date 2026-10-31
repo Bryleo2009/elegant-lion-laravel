@@ -2,11 +2,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Appointment;
+use App\Models\AppointmentEvent;
 use App\Models\Barber;
 use App\Models\Client;
 use App\Models\Service;
 use App\Models\TimeOff;
 use App\Models\WorkSchedule;
+use App\Services\AppointmentCompletionService;
 use App\Services\BookingConflict;
 use App\Services\BookingService;
 use Illuminate\Http\JsonResponse;
@@ -45,15 +47,23 @@ class AdminController extends Controller
         ]);
     }
 
-    public function overview(Request $request): JsonResponse
+    public function overview(Request $request, AppointmentCompletionService $completion): JsonResponse
     {
+        $completion->completeExpired();
         $day = $request->validate(['date' => ['nullable', 'date_format:Y-m-d']])['date'] ?? now()->toDateString();
         $query = Appointment::with(['client:id,name,phone','barber:id,name','service:id,name,duration_minutes,price_cents'])
             ->whereDate('starts_at', $day)->orderBy('starts_at');
         $appointments = $query->get();
-        $appointments->each(function (Appointment $item) {
+        $autoCompletedIds = AppointmentEvent::query()
+            ->whereIn('appointment_id', $appointments->pluck('id'))
+            ->where('to_status', 'completed')
+            ->where('note', AppointmentCompletionService::AUDIT_NOTE)
+            ->pluck('appointment_id')->flip();
+
+        $appointments->each(function (Appointment $item) use ($autoCompletedIds) {
             $item->setAttribute('day', $item->starts_at->format('Y-m-d'));
             $item->setAttribute('time', $item->starts_at->format('H:i'));
+            $item->setAttribute('auto_completed', $item->status === 'completed' && $autoCompletedIds->has($item->id));
         });
         return response()->json([
             'appointments' => $appointments,

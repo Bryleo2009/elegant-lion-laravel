@@ -165,8 +165,16 @@ class BookingService
             Barber::whereKey($appointment->barber_id)->lockForUpdate()->firstOrFail();
             $appointment = Appointment::whereKey($appointment->id)->lockForUpdate()->firstOrFail();
             if ($appointment->status === $status) return $appointment;
-            if ($appointment->status !== 'confirmed') {
-                throw new BookingConflict('Solo se puede cambiar el estado de una cita confirmada.');
+            $latestEvent = $appointment->status === 'completed'
+                ? $appointment->events()->orderByDesc('id')->first()
+                : null;
+            $correctingAutomaticCompletion = $appointment->status === 'completed'
+                && $status === 'no_show'
+                && $latestEvent?->to_status === 'completed'
+                && $latestEvent?->note === AppointmentCompletionService::AUDIT_NOTE;
+
+            if ($appointment->status !== 'confirmed' && ! $correctingAutomaticCompletion) {
+                throw new BookingConflict('Solo se puede cambiar una cita confirmada o corregir una finalización automática.');
             }
             if (in_array($status, ['no_show', 'completed'], true) && $appointment->starts_at->isFuture()) {
                 throw new BookingConflict('Aún no puedes marcar como completada o inasistencia una cita futura.');
@@ -179,6 +187,7 @@ class BookingService
             if (in_array($status, ['cancelled', 'no_show'], true)) $appointment->slots()->delete();
             $appointment->events()->create([
                 'user_id' => $adminId, 'from_status' => $previous, 'to_status' => $status,
+                'note' => $correctingAutomaticCompletion ? 'Corrección manual de cierre automático: no asistió.' : null,
             ]);
             return $appointment->load(['client', 'service', 'barber']);
         }, 3);

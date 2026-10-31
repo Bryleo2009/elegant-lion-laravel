@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\User;
+use App\Services\AppointmentCompletionService;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('admin:create {email}', function (string $email) {
     $email = strtolower(trim($email));
@@ -22,3 +24,10 @@ Artisan::command('admin:create {email}', function (string $email) {
     $this->info('Administrador creado o actualizado.');
     return 0;
 })->purpose('Crear administrador con contraseña interactiva, sin credenciales hardcodeadas');
+
+Artisan::command('appointments:complete-expired', function () {
+    $count = app(AppointmentCompletionService::class)->completeExpired();
+    $this->info("Reservas finalizadas automáticamente: {$count}");
+})->purpose('Marcar como atendidas las reservas confirmadas cuyo servicio terminó');
+
+Schedule::command('appointments:complete-expired')->everyMinute();

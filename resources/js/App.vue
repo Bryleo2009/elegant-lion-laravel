@@ -354,7 +354,10 @@ onMounted(async () => {
   window.addEventListener('appinstalled', clearInstallPrompt)
   await initSetup()
   if (isAdmin) {
-    adminClock = window.setInterval(() => { adminNowKey.value = timeKeyInZone() }, 60000)
+    adminClock = window.setInterval(() => {
+      adminNowKey.value = timeKeyInZone()
+      if (user.value && activeTab.value === 'agenda') loadAgenda()
+    }, 60000)
     await checkSession()
   } else await loadTimes()
 })
@@ -583,7 +586,7 @@ onBeforeUnmount(() => {
                   <div v-if="appointmentDisplayState(a,adminNowKey)!=='upcoming' && (index===0 || appointmentDisplayState(displayedAppointments[index-1],adminNowKey)==='upcoming')" class="appointment-history-divider"><span>Historial del día</span><small>Finalizadas o con hora vencida</small></div>
                   <article class="appointment-card" :class="[`is-${appointmentDisplayState(a,adminNowKey)}`,{'is-muted':appointmentDisplayState(a,adminNowKey)!=='upcoming'}]">
                     <div class="appt-time"><strong>{{a.time || a.starts_at?.slice(11,16)}}</strong><small>{{a.service?.duration_minutes}} MIN</small></div>
-                    <div class="appt-main"><div class="appt-top"><strong>{{a.client?.name}}</strong><span v-if="appointmentDisplayState(a,adminNowKey)==='past'" class="status-pill past">Hora pasada</span><span v-else class="status-pill" :class="a.status">{{statusLabel(a.status)}}</span></div><p>{{a.service?.name}} · {{a.barber?.name}}</p><div class="appointment-contact"><a :href="'tel:'+a.client?.phone" class="phone-link"><Phone :size="12"/> {{a.client?.phone}}</a><a :href="whatsappContactUrl(a.client?.phone,a.client?.name)" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="Contactar por WhatsApp"><MessageCircle :size="14"/> WhatsApp</a></div><div v-if="a.status==='confirmed'" class="appt-actions"><button @click="changeStatus(a,'completed')" :disabled="busy"><CheckCircle2 :size="14"/> Atendió</button><button @click="changeStatus(a,'no_show')" :disabled="busy"><Ban :size="14"/> No asistió</button><button @click="changeStatus(a,'cancelled')" :disabled="busy" class="danger-text">Cancelar</button></div></div>
+                    <div class="appt-main"><div class="appt-top"><strong>{{a.client?.name}}</strong><span v-if="appointmentDisplayState(a,adminNowKey)==='past'" class="status-pill past">Hora pasada</span><span v-else class="status-pill" :class="a.status">{{a.status==='completed' && a.auto_completed ? 'Atendida (automática)' : statusLabel(a.status)}}</span></div><p>{{a.service?.name}} · {{a.barber?.name}}</p><div class="appointment-contact"><a :href="'tel:'+a.client?.phone" class="phone-link"><Phone :size="12"/> {{a.client?.phone}}</a><a :href="whatsappContactUrl(a.client?.phone,a.client?.name)" target="_blank" rel="noopener noreferrer" class="whatsapp-link" aria-label="Contactar por WhatsApp"><MessageCircle :size="14"/> WhatsApp</a></div><div v-if="a.status==='confirmed' || (a.status==='completed' && a.auto_completed)" class="appt-actions"><button v-if="a.status==='confirmed'" @click="changeStatus(a,'completed')" :disabled="busy"><CheckCircle2 :size="14"/> Atendió</button><button @click="changeStatus(a,'no_show')" :disabled="busy"><Ban :size="14"/> {{a.status==='completed' ? 'Corregir: no asistió' : 'No asistió'}}</button><button v-if="a.status==='confirmed'" @click="changeStatus(a,'cancelled')" :disabled="busy" class="danger-text">Cancelar</button></div></div>
                   </article>
                 </template>
               </div>
