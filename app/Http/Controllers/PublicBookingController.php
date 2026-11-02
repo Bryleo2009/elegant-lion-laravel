@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\Service;
 use App\Services\BookingConflict;
 use App\Services\BookingService;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
@@ -45,6 +46,35 @@ class PublicBookingController extends Controller
             'date' => ['required', 'date_format:Y-m-d'],
         ]);
         return response()->json(['slots' => $booking->availability($data['barber_id'], $data['service_id'], $data['date'])]);
+    }
+
+    /** Disponibilidad real por profesional, para mostrar alternativas sin mezclar agendas. */
+    public function availabilityOverview(Request $request, BookingService $booking): JsonResponse
+    {
+        $data = $request->validate([
+            'service_id' => ['required', 'integer', 'exists:services,id'],
+            'date' => ['required', 'date_format:Y-m-d'],
+            'days' => ['sometimes', 'integer', 'between:1,3'],
+        ]);
+
+        $timezone = config('app.timezone', 'America/Lima');
+        $today = CarbonImmutable::today($timezone);
+        $start = CarbonImmutable::createFromFormat('!Y-m-d', $data['date'], $timezone);
+        if ($start->lt($today) || $start->gt($today->addDays(89))) {
+            throw ValidationException::withMessages(['date' => 'La fecha está fuera del rango de reservas.']);
+        }
+
+        $barbers = Barber::where('active', true)->orderBy('sort_order')->orderBy('name')->get(['id']);
+        $dates = [];
+        for ($offset = 0; $offset < ($data['days'] ?? 1); $offset++) {
+            $day = $start->addDays($offset)->toDateString();
+            $dates[$day] = [];
+            foreach ($barbers as $barber) {
+                $dates[$day][$barber->id] = $booking->availability($barber->id, $data['service_id'], $day);
+            }
+        }
+
+        return response()->json(['dates' => $dates])->header('Cache-Control', 'no-store');
     }
 
     public function store(Request $request, BookingService $booking): JsonResponse

@@ -241,6 +241,44 @@ class BookingTest extends TestCase
         $this->assertNotContains('12:30', $slots);
     }
 
+    public function test_overview_offers_another_barber_when_first_has_no_schedule(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $other = Barber::whereKeyNot($barber->id)->firstOrFail();
+        $date = CarbonImmutable::now(config('app.timezone'))->addDay();
+        $day = $date->toDateString();
+
+        WorkSchedule::where('barber_id', $barber->id)->where('weekday', $date->dayOfWeek)->delete();
+        WorkSchedule::where('barber_id', $other->id)->where('weekday', $date->dayOfWeek)->delete();
+        WorkSchedule::create([
+            'barber_id' => $other->id, 'weekday' => $date->dayOfWeek,
+            'opens_at' => '10:00', 'closes_at' => '18:00',
+        ]);
+
+        $response = $this->getJson("/api/public/availability-overview?service_id={$service->id}&date={$day}&days=1")
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store');
+
+        $this->assertSame([], $response->json("dates.{$day}.{$barber->id}"));
+        $this->assertContains('10:00', $response->json("dates.{$day}.{$other->id}"));
+
+        TimeOff::create(['barber_id' => $other->id, 'day' => $day, 'reason' => 'Ausencia']);
+        $blocked = $this->getJson("/api/public/availability-overview?service_id={$service->id}&date={$day}")
+            ->assertOk();
+        $this->assertSame([], $blocked->json("dates.{$day}.{$other->id}"));
+    }
+
+    public function test_overview_rejects_excessive_date_ranges(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $day = CarbonImmutable::now(config('app.timezone'))->toDateString();
+
+        $this->getJson("/api/public/availability-overview?service_id={$service->id}&date={$day}&days=90")
+            ->assertUnprocessable();
+        $this->getJson("/api/public/availability-overview?service_id={$service->id}&date=2020-01-01")
+            ->assertUnprocessable();
+    }
+
     public function test_public_availability_starts_every_hour_even_when_schedule_opens_at_half_hour(): void
     {
         [$barber, $service] = $this->setupCatalog();

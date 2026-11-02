@@ -20,6 +20,9 @@ const date = ref('')
 const time = ref('')
 const times = ref([])
 const loadingTimes = ref(false)
+const availabilityPreview = ref({})
+const previewLoaded = ref(false)
+const alternativeLoading = ref(false)
 const name = ref('')
 const phone = ref('')
 const clientLookupState = ref('idle')
@@ -83,6 +86,18 @@ const selectedService = computed(() => setup.value.services.find(s => s.id === s
 const selectedBookingDays = computed(() => Math.max(1, Number(selectedBarber.value?.booking_days_ahead || setup.value.days_ahead || 3)))
 const bookingMaxDate = computed(() => localDateAdd(setup.value.today, selectedBookingDays.value - 1))
 const nextDays = computed(() => Array.from({length:selectedBookingDays.value}, (_,i)=>localDateAdd(setup.value.today,i)))
+const previewDays = computed(() => Math.min(3, Math.max(1, ...setup.value.barbers.map(b => Number(b.booking_days_ahead || setup.value.days_ahead || 3)))))
+const previewDates = computed(() => Array.from({length:previewDays.value}, (_,i)=>localDateAdd(setup.value.today,i)))
+const alternativeBarbers = computed(() => setup.value.barbers
+  .filter(b => b.id !== barberId.value)
+  .map(b => ({...b, slots: availabilityPreview.value[date.value]?.[b.id] || []}))
+  .filter(b => b.slots.length > 0))
+function noPreviewSlots(barber) {
+  return previewLoaded.value && previewDates.value.every(day => !(availabilityPreview.value[day]?.[barber.id] || []).length)
+}
+function dayWithoutSlots(day) {
+  return !!availabilityPreview.value[day] && !(availabilityPreview.value[day]?.[barberId.value] || []).length
+}
 const contactErrors = computed(() => validateBookingContact({ name: name.value, phone: phone.value, existingClient: clientLookupState.value === 'found' }))
 const visibleContactErrors = computed(() => ({
   name: (contactTouched.value.name || contactSubmitted.value) ? contactErrors.value.name : '',
@@ -131,17 +146,55 @@ async function initSetup() {
     manual.value.date = setup.value.today
   } catch(e) { fail(e) }
 }
+let manuallySelectedBarber = false
+function chooseBarber(id) {
+  manuallySelectedBarber = true
+  barberId.value = id
+}
+let previewRequest = 0
+async function loadInitialAvailability() {
+  const requestId = ++previewRequest
+  previewLoaded.value = false
+  availabilityPreview.value = {}
+  if (isAdmin || !serviceId.value || !setup.value.today || !setup.value.barbers.length) return
+  try {
+    const params = new URLSearchParams({service_id: serviceId.value, date: setup.value.today, days: previewDays.value})
+    const result = await api('/api/public/availability-overview?' + params)
+    if (requestId !== previewRequest) return
+    availabilityPreview.value = {...availabilityPreview.value, ...result.dates}
+    previewLoaded.value = true
+    if (!manuallySelectedBarber && step.value === 1) {
+      const firstAvailable = setup.value.barbers.find(b => previewDates.value.some(day => (result.dates[day]?.[b.id] || []).length))
+      if (firstAvailable) barberId.value = firstAvailable.id
+    }
+  } catch (e) { if (requestId === previewRequest) fail(e) }
+}
+watch([serviceId, () => setup.value.today], loadInitialAvailability)
+
+async function loadDayAlternatives(requestId) {
+  alternativeLoading.value = true
+  try {
+    const params = new URLSearchParams({service_id: serviceId.value, date: date.value, days: 1})
+    const result = await api('/api/public/availability-overview?' + params)
+    if (requestId === lastRequest) availabilityPreview.value = {...availabilityPreview.value, ...result.dates}
+  } catch (e) { if (requestId === lastRequest) fail(e) }
+  finally { if (requestId === lastRequest) alternativeLoading.value = false }
+}
 let lastRequest = 0
 async function loadTimes() {
   const id = ++lastRequest
   time.value = ''
   times.value = []
+  alternativeLoading.value = false
   if (!barberId.value || !serviceId.value || !date.value) return
   loadingTimes.value = true
   try {
     const params = new URLSearchParams({barber_id:barberId.value, service_id:serviceId.value, date:date.value})
     const result = await api('/api/public/availability?' + params)
-    if (id === lastRequest) times.value = result.slots
+    if (id === lastRequest) {
+      times.value = result.slots
+      if (!result.slots.length) await loadDayAlternatives(id)
+    }
   } catch(e) { if (id === lastRequest) fail(e) }
   finally { if (id === lastRequest) loadingTimes.value = false }
 }
@@ -541,9 +594,9 @@ onBeforeUnmount(() => {
             <fieldset class="booking-fieldset">
               <legend>Profesional</legend>
               <div class="barber-choice-grid">
-                <button v-for="b in setup.barbers" :key="b.id" type="button" class="barber-choice" :class="{selected:barberId===b.id}" @click="barberId=b.id" :aria-pressed="barberId===b.id">
+                <button v-for="b in setup.barbers" :key="b.id" type="button" class="barber-choice" :class="{selected:barberId===b.id}" @click="chooseBarber(b.id)" :aria-pressed="barberId===b.id">
                   <span class="barber-avatar">{{b.name.substring(0,1).toUpperCase()}}</span>
-                  <span><strong>{{b.name}}</strong><small>{{b.subtitle || 'Barbero profesional'}}</small></span>
+                  <span><strong>{{b.name}}</strong><small>{{b.subtitle || 'Barbero profesional'}}</small><small v-if="noPreviewSlots(b)" class="barber-unavailable">Sin turnos en los próximos {{previewDays}} días</small></span>
                   <span class="choice-check"><Check :size="15" /></span>
                 </button>
               </div>
@@ -562,7 +615,7 @@ onBeforeUnmount(() => {
             <fieldset class="booking-fieldset">
               <legend>Fecha</legend>
               <div class="date-choice-row" role="group" aria-label="Fechas disponibles">
-                <button v-for="d in nextDays" :key="d" type="button" class="date-choice" :class="{selected:date===d}" :aria-pressed="date===d" @click="date=d">
+                <button v-for="d in nextDays" :key="d" type="button" class="date-choice" :class="{selected:date===d, 'without-slots':dayWithoutSlots(d)}" :aria-pressed="date===d" @click="date=d">
                   <small>{{weekDay(d)}}</small><strong>{{d.slice(-2)}}</strong><span>{{new Date(`${d}T12:00:00Z`).toLocaleDateString('es-PE',{month:'short',timeZone:'UTC'}).replace('.','')}}</span>
                 </button>
               </div>
@@ -571,7 +624,18 @@ onBeforeUnmount(() => {
             <fieldset class="booking-fieldset">
               <legend>Hora disponible</legend>
               <div v-if="loadingTimes" class="booking-empty loading"><span></span> Consultando la agenda…</div>
-              <div v-else-if="!times.length" class="booking-empty"><CalendarOff :size="21"/><div><strong>No quedan horarios para este día.</strong><small>Elige otra fecha para continuar.</small></div></div>
+              <template v-else-if="!times.length">
+                <div class="booking-empty"><CalendarOff :size="21"/><div><strong>Este profesional no tiene horarios para este día.</strong><small>Puedes elegir otra fecha o un profesional disponible.</small></div></div>
+                <div v-if="alternativeLoading" class="booking-alternatives-status" role="status">Buscando horarios con otros profesionales…</div>
+                <div v-else-if="alternativeBarbers.length" class="booking-alternatives">
+                  <strong>Otros profesionales disponibles el {{dateLabel(date)}}</strong>
+                  <div class="barber-alternative-grid">
+                    <button v-for="b in alternativeBarbers" :key="b.id" type="button" class="barber-alternative" @click="chooseBarber(b.id)">
+                      <span>{{b.name}} <small>{{b.slots.length}} {{b.slots.length===1 ? 'horario' : 'horarios'}}</small></span><ArrowRight :size="16"/>
+                    </button>
+                  </div>
+                </div>
+              </template>
               <div v-else class="time-choice-grid"><button v-for="t in times" :key="t" type="button" :aria-pressed="time===t" class="time-choice" :class="{selected:time===t}" @click="time=t"><Clock3 :size="15"/> {{t}}</button></div>
             </fieldset>
             <div class="mobile-selection"><span>{{selectedService?.name}} · {{selectedBarber?.name}}</span><strong>{{money(selectedService?.price_cents)}}</strong></div>
