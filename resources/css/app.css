@@ -194,10 +194,8 @@ input[type=checkbox] { width: 17px; height: 17px; accent-color: var(--gold); }
 .booking-contact label { display: flex; flex-direction: column; gap: 7px; color: #3f3a33; font-size: 13px; font-weight: 600; }
 .booking-contact input { height: 50px; padding: 11px 14px; background: #fff; border: 1px solid #c9bfb1; border-radius: var(--r); color: var(--ink); font-size: 15px; font-weight: 400; }
 .booking-contact input::placeholder { color: #a39b8f; }
-.booking-contact input[readonly] { background: #eee7dc; color: #514635; cursor: default; }
-.booking-contact .registered-client > span { display: inline-flex; align-items: center; gap: 7px; }
-.booking-contact .registered-client > span svg { color: #52805c; }
-.booking-contact .registered-client > .field-help { color: #52735a; }
+.registered-client { display: flex; align-items: flex-start; gap: 10px; padding: 14px; border: 1px solid #c0d2bf; border-radius: var(--r); background: #edf4ea; color: #456648; font-size: 13px; font-weight: 500; }
+.registered-client svg { flex-shrink: 0; margin-top: 2px; }
 .client-lookup-feedback { display: block; }
 .lookup-retry { padding: 0 3px; text-decoration: underline; font-size: inherit; font-weight: 700; color: #8e372e; }
 .lookup-retry:hover { color: #67251f; }
