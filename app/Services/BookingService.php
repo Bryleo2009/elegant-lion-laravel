@@ -131,7 +131,14 @@ class BookingService
                 if (! $this->validTime($barber, $service, $start, $occupied)) {
                     throw new BookingConflict('Ese horario ya no está disponible. Elige otro.');
                 }
-                $client = Client::firstOrCreate(['phone' => $phone], ['name' => trim($data['client_name']), 'active' => true]);
+                $client = Client::where('phone', $phone)->first();
+                if (! $client) {
+                    $clientName = trim((string) ($data['client_name'] ?? ''));
+                    if (mb_strlen($clientName) < 3) {
+                        throw new BookingConflict('Ingresa tu nombre completo para registrarte.');
+                    }
+                    $client = Client::firstOrCreate(['phone' => $phone], ['name' => $clientName, 'active' => true]);
+                }
                 if (! $client->active) $client->update(['active' => true]);
                 $appointment = Appointment::create([
                     'idempotency_key' => $key, 'request_hash' => $hash,
