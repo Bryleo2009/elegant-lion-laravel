@@ -83,7 +83,7 @@ const selectedService = computed(() => setup.value.services.find(s => s.id === s
 const selectedBookingDays = computed(() => Math.max(1, Number(selectedBarber.value?.booking_days_ahead || setup.value.days_ahead || 3)))
 const bookingMaxDate = computed(() => localDateAdd(setup.value.today, selectedBookingDays.value - 1))
 const nextDays = computed(() => Array.from({length:selectedBookingDays.value}, (_,i)=>localDateAdd(setup.value.today,i)))
-const contactErrors = computed(() => validateBookingContact({ name: name.value, phone: phone.value }))
+const contactErrors = computed(() => validateBookingContact({ name: name.value, phone: phone.value, existingClient: clientLookupState.value === 'found' }))
 const visibleContactErrors = computed(() => ({
   name: (contactTouched.value.name || contactSubmitted.value) ? contactErrors.value.name : '',
   phone: (contactTouched.value.phone || contactSubmitted.value) ? contactErrors.value.phone : '',
@@ -171,7 +171,7 @@ function lookupClientByPhone() {
       const response = await api('/api/public/client-lookup?phone=' + encodeURIComponent(normalizePhone(phone.value)))
       if (sequence !== clientLookupSequence) return
       if (response.exists) {
-        name.value = response.name
+        name.value = ''
         clientLookupState.value = 'found'
       } else {
         name.value = ''
@@ -198,7 +198,7 @@ async function confirmBooking() {
   try {
     const result = await api('/api/bookings', { method:'POST', body: {
       barber_id:barberId.value, service_id:serviceId.value, date:date.value, time:time.value,
-      client_name:name.value.trim(), phone:normalizePhone(phone.value), idempotency_key:bookingId.value,
+      client_name:clientLookupState.value === 'found' ? null : name.value.trim(), phone:normalizePhone(phone.value), idempotency_key:bookingId.value,
     }})
     booked.value = result.appointment
     step.value = 3
@@ -601,11 +601,10 @@ onBeforeUnmount(() => {
                   <small v-if="clientLookupState==='checking'" class="field-help client-lookup-feedback" role="status">Buscando tu registro…</small>
                   <small v-if="clientLookupState==='error'" class="field-error client-lookup-feedback" role="alert">{{clientLookupError}} <button type="button" class="lookup-retry" @click="lookupClientByPhone">Reintentar</button></small>
                 </label>
-                <label v-if="clientLookupState==='found'" class="registered-client">
-                  <span>Nombre registrado <CheckCircle2 :size="16" /></span>
-                  <input :value="name" readonly autocomplete="off" aria-label="Nombre del cliente registrado" />
-                  <small class="field-help">Ya encontramos tu registro. No necesitas registrarte otra vez.</small>
-                </label>
+                <div v-if="clientLookupState==='found'" class="registered-client" role="status">
+                  <CheckCircle2 :size="18" />
+                  <span>Ya encontramos tu registro. Usaremos tus datos guardados para la reserva.</span>
+                </div>
                 <label v-else-if="clientLookupState==='new'" :class="{invalid:visibleContactErrors.name}">
                   <span>Nombre completo</span>
                   <input v-model="name" @blur="contactTouched.name=true" :aria-invalid="!!visibleContactErrors.name" aria-describedby="name-error" required autocomplete="name" maxlength="120" placeholder="Ej. Juan Pérez" />
