@@ -91,7 +91,7 @@ const visibleContactErrors = computed(() => ({
 const canBook = computed(() => barberId.value && serviceId.value && date.value && time.value
   && ['found', 'new'].includes(clientLookupState.value)
   && !contactErrors.value.name && !contactErrors.value.phone)
-const validClientPhone = computed(() => /^9\\d{8}$/.test(normalizePhone(phone.value)))
+const validClientPhone = computed(() => /^9\d{8}$/.test(normalizePhone(phone.value)))
 const contactReadyToSubmit = computed(() => !busy.value
   && (!validClientPhone.value || ['found', 'new'].includes(clientLookupState.value)))
 const activeBarbers = computed(() => barbers.value.filter(barber => barber.active))
