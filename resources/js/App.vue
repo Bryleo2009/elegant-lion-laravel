@@ -22,6 +22,8 @@ const times = ref([])
 const loadingTimes = ref(false)
 const name = ref('')
 const phone = ref('')
+const clientLookupState = ref('idle')
+const clientLookupError = ref('')
 const contactTouched = ref({ name: false, phone: false })
 const contactSubmitted = ref(false)
 const bookingId = ref(crypto.randomUUID())
@@ -86,7 +88,12 @@ const visibleContactErrors = computed(() => ({
   name: (contactTouched.value.name || contactSubmitted.value) ? contactErrors.value.name : '',
   phone: (contactTouched.value.phone || contactSubmitted.value) ? contactErrors.value.phone : '',
 }))
-const canBook = computed(() => barberId.value && serviceId.value && date.value && time.value && !contactErrors.value.name && !contactErrors.value.phone)
+const canBook = computed(() => barberId.value && serviceId.value && date.value && time.value
+  && ['found', 'new'].includes(clientLookupState.value)
+  && !contactErrors.value.name && !contactErrors.value.phone)
+const validClientPhone = computed(() => /^9\\d{8}$/.test(normalizePhone(phone.value)))
+const contactReadyToSubmit = computed(() => !busy.value
+  && (!validClientPhone.value || ['found', 'new'].includes(clientLookupState.value)))
 const activeBarbers = computed(() => barbers.value.filter(barber => barber.active))
 const displayedAppointments = computed(() => sortAppointmentsForDisplay(appointments.value, adminNowKey.value))
 const manualBookingMaxDate = computed(() => {
@@ -143,6 +150,47 @@ watch([barberId, serviceId, date], () => {
   bookingId.value = crypto.randomUUID(); booked.value = null; loadTimes()
 })
 watch([time, name, phone], () => { if (!busy.value) bookingId.value = crypto.randomUUID() })
+
+let clientLookupTimer
+let clientLookupSequence = 0
+function onPhoneInput(event) {
+  const digits = normalizePhone(event.target.value).slice(0, 9)
+  event.target.value = digits
+  phone.value = digits
+}
+function lookupClientByPhone() {
+  clearTimeout(clientLookupTimer)
+  const sequence = ++clientLookupSequence
+  clientLookupState.value = 'idle'
+  clientLookupError.value = ''
+  if (!validClientPhone.value) return
+
+  clientLookupState.value = 'checking'
+  clientLookupTimer = setTimeout(async () => {
+    try {
+      const response = await api('/api/public/client-lookup?phone=' + encodeURIComponent(normalizePhone(phone.value)))
+      if (sequence !== clientLookupSequence) return
+      if (response.exists) {
+        name.value = response.name
+        clientLookupState.value = 'found'
+      } else {
+        name.value = ''
+        clientLookupState.value = 'new'
+      }
+    } catch (e) {
+      if (sequence !== clientLookupSequence) return
+      clientLookupError.value = e.status === 429
+        ? 'Demasiados intentos. Espera un minuto antes de volver a consultar.'
+        : 'No se pudo consultar el cliente. Vuelve a intentarlo.'
+      clientLookupState.value = 'error'
+    }
+  }, 350)
+}
+watch(phone, () => {
+  name.value = ''
+  contactTouched.value.name = false
+  lookupClientByPhone()
+})
 async function confirmBooking() {
   contactSubmitted.value = true
   if (!canBook.value || busy.value) return
@@ -161,6 +209,7 @@ async function confirmBooking() {
 }
 function resetBooking() {
   booked.value = null; step.value = 1; name.value = ''; phone.value = ''; time.value = ''
+  clearTimeout(clientLookupTimer); clientLookupSequence++; clientLookupState.value = 'idle'; clientLookupError.value = ''
   contactTouched.value = { name: false, phone: false }; contactSubmitted.value = false
   bookingId.value = crypto.randomUUID(); loadTimes()
 }
@@ -544,19 +593,27 @@ onBeforeUnmount(() => {
             </div>
             <form class="booking-contact" @submit.prevent="confirmBooking" novalidate>
               <div class="contact-grid">
-                <label :class="{invalid:visibleContactErrors.name}">
-                  <span>Nombre completo</span>
-                  <input v-model="name" @blur="contactTouched.name=true" :aria-invalid="!!visibleContactErrors.name" aria-describedby="name-error" required autocomplete="name" maxlength="120" placeholder="Ej. Juan Pérez" />
-                  <small id="name-error" class="field-error" aria-live="polite">{{visibleContactErrors.name}}</small>
-                </label>
                 <label :class="{invalid:visibleContactErrors.phone}">
-                  <span>Celular</span>
-                  <input v-model="phone" @blur="contactTouched.phone=true" :aria-invalid="!!visibleContactErrors.phone" aria-describedby="phone-help phone-error" required autocomplete="tel" type="tel" inputmode="numeric" maxlength="15" placeholder="987 654 321" />
+                  <span>Número de celular</span>
+                  <input :value="phone" @input="onPhoneInput" @blur="contactTouched.phone=true" :aria-invalid="!!visibleContactErrors.phone" aria-describedby="phone-help phone-error" required autocomplete="tel-national" type="tel" inputmode="numeric" maxlength="9" placeholder="987654321" />
                   <small v-if="!visibleContactErrors.phone" id="phone-help" class="field-help">9 dígitos, sin código de país.</small>
                   <small id="phone-error" class="field-error" aria-live="polite">{{visibleContactErrors.phone}}</small>
+                  <small v-if="clientLookupState==='checking'" class="field-help client-lookup-feedback" role="status">Buscando tu registro…</small>
+                  <small v-if="clientLookupState==='error'" class="field-error client-lookup-feedback" role="alert">{{clientLookupError}} <button type="button" class="lookup-retry" @click="lookupClientByPhone">Reintentar</button></small>
+                </label>
+                <label v-if="clientLookupState==='found'" class="registered-client">
+                  <span>Nombre registrado <CheckCircle2 :size="16" /></span>
+                  <input :value="name" readonly autocomplete="off" aria-label="Nombre del cliente registrado" />
+                  <small class="field-help">Ya encontramos tu registro. No necesitas registrarte otra vez.</small>
+                </label>
+                <label v-else-if="clientLookupState==='new'" :class="{invalid:visibleContactErrors.name}">
+                  <span>Nombre completo</span>
+                  <input v-model="name" @blur="contactTouched.name=true" :aria-invalid="!!visibleContactErrors.name" aria-describedby="name-error" required autocomplete="name" maxlength="120" placeholder="Ej. Juan Pérez" />
+                  <small class="field-help">Te registraremos al confirmar tu primera reserva.</small>
+                  <small id="name-error" class="field-error" aria-live="polite">{{visibleContactErrors.name}}</small>
                 </label>
               </div>
-              <button class="booking-primary" :disabled="busy" type="submit">{{busy ? 'Confirmando tu reserva…' : 'Confirmar reserva'}} <ArrowRight :size="19"/></button>
+              <button class="booking-primary" :disabled="!contactReadyToSubmit" type="submit">{{busy ? 'Confirmando tu reserva…' : 'Confirmar reserva'}} <ArrowRight :size="19"/></button>
             </form>
             <p class="booking-reassurance"><ShieldCheck :size="15"/> Tus datos se usan únicamente para gestionar esta cita.</p>
           </template>
