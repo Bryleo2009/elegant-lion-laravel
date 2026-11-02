@@ -49,13 +49,13 @@ class BookingTest extends TestCase
         ];
     }
 
-    public function test_lookup_returns_existing_client_name_without_modifying_database(): void
+    public function test_lookup_detects_existing_client_without_exposing_personal_data(): void
     {
         Client::create(['name' => 'María Rodríguez', 'phone' => '987654321', 'active' => true]);
 
         $this->getJson('/api/public/client-lookup?phone=987%20654%20321')
             ->assertOk()
-            ->assertJson(['exists' => true, 'name' => 'María Rodríguez'])
+            ->assertExactJson(['exists' => true])
             ->assertHeader('Cache-Control', 'private, no-store');
 
         $this->assertDatabaseCount('clients', 1);
@@ -80,7 +80,7 @@ class BookingTest extends TestCase
         [$barber, $service] = $this->setupCatalog();
         $client = Client::create(['name' => 'Cliente Original', 'phone' => '987654321', 'active' => true]);
         $data = $this->bookingData($barber, $service);
-        $data['client_name'] = 'Nombre Equivocado';
+        unset($data['client_name']);
 
         $this->postJson('/api/bookings', $data)
             ->assertCreated()
@@ -88,6 +88,18 @@ class BookingTest extends TestCase
 
         $this->assertDatabaseCount('clients', 1);
         $this->assertDatabaseHas('appointments', ['client_id' => $client->id]);
+    }
+
+    public function test_new_client_must_provide_name_at_booking(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $data = $this->bookingData($barber, $service);
+        unset($data['client_name']);
+
+        $this->postJson('/api/bookings', $data)
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('client_name');
+        $this->assertDatabaseCount('clients', 0);
     }
 
     public function test_repeating_identical_request_does_not_create_duplicate(): void
