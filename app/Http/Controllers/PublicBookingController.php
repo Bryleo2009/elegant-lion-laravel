@@ -2,6 +2,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Barber;
+use App\Models\Client;
 use App\Models\Service;
 use App\Services\BookingConflict;
 use App\Services\BookingService;
@@ -20,6 +21,24 @@ class PublicBookingController extends Controller
             'days_ahead' => config('booking.days_ahead'),
             'today' => now()->toDateString(),
         ]);
+    }
+
+    /**
+     * Consulta exclusivamente el nombre asociado a un celular válido.
+     * El endpoint está limitado por IP para reducir búsquedas automatizadas.
+     */
+    public function lookupClient(Request $request): JsonResponse
+    {
+        $request->merge(['phone' => preg_replace('/\\D+/', '', (string) $request->input('phone', ''))]);
+        $data = $request->validate([
+            'phone' => ['required', 'regex:/^9[0-9]{8}$/'],
+        ]);
+
+        $client = Client::query()->where('phone', $data['phone'])->first(['name']);
+
+        return response()->json(
+            $client ? ['exists' => true, 'name' => $client->name] : ['exists' => false]
+        )->header('Cache-Control', 'private, no-store');
     }
 
     public function availability(Request $request, BookingService $booking): JsonResponse
