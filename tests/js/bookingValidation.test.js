@@ -27,3 +27,7 @@ test('validateBookingContact explains the peruvian mobile format', () => {
 test('validateBookingContact accepts accents and a formatted mobile number', () => {
   assert.deepEqual(validateBookingContact({ name: 'Álvaro Núñez', phone: '987 654 321' }), { name: '', phone: '' })
 })
+
+test('validateBookingContact does not request a name for a returning customer', () => {
+  assert.deepEqual(validateBookingContact({ name: '', phone: '987654321', existingClient: true }), { name: '', phone: '' })
+})
