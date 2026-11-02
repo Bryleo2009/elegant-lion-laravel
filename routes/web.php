@@ -10,6 +10,7 @@ Route::redirect('/login', '/admin')->name('login');
 
 Route::prefix('api')->group(function () {
     Route::get('/public/setup', [PublicBookingController::class, 'setup']);
+    Route::get('/public/client-lookup', [PublicBookingController::class, 'lookupClient'])->middleware('throttle:10,1');
     Route::get('/public/availability', [PublicBookingController::class, 'availability'])->middleware('throttle:availability');
     Route::post('/bookings', [PublicBookingController::class, 'store'])->middleware('throttle:booking');
 
