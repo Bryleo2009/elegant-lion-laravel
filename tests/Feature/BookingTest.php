@@ -4,6 +4,7 @@ namespace Tests\Feature;
 use App\Models\Appointment;
 use App\Models\AppointmentSlot;
 use App\Models\Barber;
+use App\Models\Client;
 use App\Models\Service;
 use App\Models\User;
 use App\Models\TimeOff;
@@ -46,6 +47,47 @@ class BookingTest extends TestCase
             'date' => $date, 'time' => $time, 'client_name' => 'Cliente Prueba',
             'phone' => '987654321', 'idempotency_key' => (string) Str::uuid(),
         ];
+    }
+
+    public function test_lookup_returns_existing_client_name_without_modifying_database(): void
+    {
+        Client::create(['name' => 'María Rodríguez', 'phone' => '987654321', 'active' => true]);
+
+        $this->getJson('/api/public/client-lookup?phone=987%20654%20321')
+            ->assertOk()
+            ->assertJson(['exists' => true, 'name' => 'María Rodríguez'])
+            ->assertHeader('Cache-Control', 'private, no-store');
+
+        $this->assertDatabaseCount('clients', 1);
+    }
+
+    public function test_lookup_of_new_client_does_not_register_until_booking(): void
+    {
+        $this->getJson('/api/public/client-lookup?phone=987654321')
+            ->assertOk()
+            ->assertExactJson(['exists' => false]);
+
+        $this->assertDatabaseCount('clients', 0);
+    }
+
+    public function test_lookup_rejects_invalid_phone(): void
+    {
+        $this->getJson('/api/public/client-lookup?phone=12345678')->assertUnprocessable();
+    }
+
+    public function test_booking_uses_registered_name_and_prevents_duplicate_client(): void
+    {
+        [$barber, $service] = $this->setupCatalog();
+        $client = Client::create(['name' => 'Cliente Original', 'phone' => '987654321', 'active' => true]);
+        $data = $this->bookingData($barber, $service);
+        $data['client_name'] = 'Nombre Equivocado';
+
+        $this->postJson('/api/bookings', $data)
+            ->assertCreated()
+            ->assertJsonPath('appointment.name', 'Cliente Original');
+
+        $this->assertDatabaseCount('clients', 1);
+        $this->assertDatabaseHas('appointments', ['client_id' => $client->id]);
     }
 
     public function test_repeating_identical_request_does_not_create_duplicate(): void
