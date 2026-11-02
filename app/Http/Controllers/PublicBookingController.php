@@ -3,13 +3,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Barber;
 use App\Models\Client;
-use Illuminate\Validation\ValidationException;
 use App\Models\Service;
 use App\Services\BookingConflict;
 use App\Services\BookingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Validation\ValidationException;
 
 class PublicBookingController extends Controller
 {
@@ -27,7 +27,7 @@ class PublicBookingController extends Controller
     /** Consulta únicamente existencia, sin exponer nombres ni otros datos personales. */
     public function lookupClient(Request $request): JsonResponse
     {
-        $request->merge(['phone' => preg_replace('/\\D+/', '', (string) $request->input('phone', ''))]);
+        $request->merge(['phone' => preg_replace('/\D+/', '', (string) $request->input('phone', ''))]);
         $data = $request->validate([
             'phone' => ['required', 'regex:/^9[0-9]{8}$/'],
         ]);
