@@ -2,14 +2,14 @@ export function normalizePhone(value = '') {
   return String(value).replace(/\D/g, '')
 }
 
-export function validateBookingContact({ name = '', phone = '' } = {}) {
+export function validateBookingContact({ name = '', phone = '', existingClient = false } = {}) {
   const cleanName = String(name).trim()
   const cleanPhone = normalizePhone(phone)
 
   let nameError = ''
-  if (cleanName.length < 3) {
+  if (!existingClient && cleanName.length < 3) {
     nameError = 'Ingresa tu nombre completo (mínimo 3 caracteres).'
-  } else if (!/\p{L}/u.test(cleanName)) {
+  } else if (!existingClient && !/\p{L}/u.test(cleanName)) {
     nameError = 'Usa letras para ingresar tu nombre.'
   }
 
