@@ -3,6 +3,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Barber;
 use App\Models\Client;
+use Illuminate\Validation\ValidationException;
 use App\Models\Service;
 use App\Services\BookingConflict;
 use App\Services\BookingService;
@@ -23,10 +24,7 @@ class PublicBookingController extends Controller
         ]);
     }
 
-    /**
-     * Consulta exclusivamente el nombre asociado a un celular válido.
-     * El endpoint está limitado por IP para reducir búsquedas automatizadas.
-     */
+    /** Consulta únicamente existencia, sin exponer nombres ni otros datos personales. */
     public function lookupClient(Request $request): JsonResponse
     {
         $request->merge(['phone' => preg_replace('/\\D+/', '', (string) $request->input('phone', ''))]);
@@ -34,11 +32,9 @@ class PublicBookingController extends Controller
             'phone' => ['required', 'regex:/^9[0-9]{8}$/'],
         ]);
 
-        $client = Client::query()->where('phone', $data['phone'])->first(['name']);
-
-        return response()->json(
-            $client ? ['exists' => true, 'name' => $client->name] : ['exists' => false]
-        )->header('Cache-Control', 'private, no-store');
+        return response()->json([
+            'exists' => Client::query()->where('phone', $data['phone'])->exists(),
+        ])->header('Cache-Control', 'private, no-store');
     }
 
     public function availability(Request $request, BookingService $booking): JsonResponse
@@ -59,10 +55,16 @@ class PublicBookingController extends Controller
             'service_id' => ['required', 'integer', 'exists:services,id'],
             'date' => ['required', 'date_format:Y-m-d'],
             'time' => ['required', 'date_format:H:i'],
-            'client_name' => ['required', 'string', 'min:3', 'max:120'],
+            'client_name' => ['nullable', 'string', 'min:3', 'max:120'],
             'phone' => ['required', 'regex:/^9[0-9]{8}$/'],
             'idempotency_key' => ['required', 'uuid'],
         ]);
+        if (! Client::where('phone', $data['phone'])->exists()
+            && trim((string) ($data['client_name'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'client_name' => 'Ingresa tu nombre completo para registrarte.',
+            ]);
+        }
         try {
             $appointment = $booking->book($data);
             return response()->json(['appointment' => [
